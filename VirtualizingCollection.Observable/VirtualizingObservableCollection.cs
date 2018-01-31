@@ -3,14 +3,54 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Threading;
 using AlphaChiTech.Virtualization.Pageing;
-using AlphaChiTech.VirtualizingCollection;
 using AlphaChiTech.VirtualizingCollection.Interfaces;
 
 namespace AlphaChiTech.Virtualization
 {
-    public class VirtualizingObservableReactiveCollection<T> : VirtualizingObservableCollection<T>,  IReplaySubjectImplementation<T> where T : class
+    public class VirtualizingObservableReactiveCollection<T> : VirtualizingObservableCollection<T>,
+        IReplaySubjectImplementation<T> where T : class
     {
+        private bool IsSourceObservable { get; }
+
+
+        #region Extended CRUD operators that take into account the DateTime of the change
+
+        /// <summary>
+        ///     Adds the range.
+        /// </summary>
+        /// <param name="newValues">The new values.</param>
+        /// <param name="timestamp">The updatedat object.</param>
+        /// <returns>Index of the last appended object</returns>
+        public int AddRange(IEnumerable<T> newValues, object timestamp = null)
+        {
+            var edit = this.GetProviderAsEditable();
+
+            var index = -1;
+            var items = new List<T>();
+
+            foreach (var item in newValues)
+            {
+                items.Add(item);
+                index = edit.OnAppend(item, timestamp);
+
+                if (!this.IsSourceObservable)
+                {
+                    var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index);
+                    this.RaiseCollectionChangedEvent(args);
+                }
+            }
+
+
+            this.OnCountTouched();
+
+
+            return index;
+        }
+
+        #endregion Extended CRUD operators that take into account the DateTime of the change
+
         #region Ctors Etc
+
         /// <summary>
         ///     Initializes a new instance of the <see cref="VirtualizingObservableCollection{T}" /> class.
         /// </summary>
@@ -20,7 +60,7 @@ namespace AlphaChiTech.Virtualization
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="VirtualizingObservableCollection{T}" /> class.
+        ///     Initializes a new instance of the <see cref="VirtualizingObservableCollection{T}" /> class.
         /// </summary>
         /// <param name="asyncProvider">The asynchronous provider.</param>
         public VirtualizingObservableReactiveCollection(IItemSourceProviderAsync<T> asyncProvider) : base(asyncProvider)
@@ -28,7 +68,7 @@ namespace AlphaChiTech.Virtualization
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="VirtualizingObservableCollection{T}" /> class.
+        ///     Initializes a new instance of the <see cref="VirtualizingObservableCollection{T}" /> class.
         /// </summary>
         /// <param name="provider">The provider.</param>
         /// <param name="reclaimer">The optional reclaimer.</param>
@@ -44,7 +84,7 @@ namespace AlphaChiTech.Virtualization
             int pageSize = 100,
             int maxPages = 100,
             int maxDeltas = -1,
-            int maxDistance = -1) : base(provider,reclaimer, pageSize, maxPages, maxDeltas, maxDistance)
+            int maxDistance = -1) : base(provider, reclaimer, pageSize, maxPages, maxDeltas, maxDistance)
         {
         }
 
@@ -68,51 +108,12 @@ namespace AlphaChiTech.Virtualization
             int maxDeltas = -1,
             int maxDistance = -1) : base(provider, reclaimer, pageSize, maxPages, maxDeltas, maxDistance)
         {
-            (this.Provider as PaginationManager<T>).CollectionChanged += this.VirtualizingObservableCollection_CollectionChanged;
+            (this.Provider as PaginationManager<T>).CollectionChanged +=
+                this.VirtualizingObservableCollection_CollectionChanged;
             this.IsSourceObservable = true;
-
         }
+
         #endregion Ctors Etc
-
-        private bool IsSourceObservable { get; } = false;
-
-        
-
-        #region Extended CRUD operators that take into account the DateTime of the change
-      
-
-        /// <summary>
-        ///     Adds the range.
-        /// </summary>
-        /// <param name="newValues">The new values.</param>
-        /// <param name="timestamp">The updatedat object.</param>
-        /// <returns>Index of the last appended object</returns>
-        public int AddRange(IEnumerable<T> newValues, object timestamp = null)
-        {
-            var edit = this.GetProviderAsEditable();
-
-            var index = -1;
-            var items = new List<T>();
-
-            foreach(var item in newValues)
-            {
-                items.Add(item);
-                index = edit.OnAppend(item, timestamp);
-
-                if(!this.IsSourceObservable)
-                {
-                    var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index);
-                    this.RaiseCollectionChangedEvent(args);
-                }
-            }
-
-
-            this.OnCountTouched();
-
-
-            return index;
-        }
-        #endregion Extended CRUD operators that take into account the DateTime of the change
 
 
         #region Internal implementation
@@ -121,18 +122,19 @@ namespace AlphaChiTech.Virtualization
         {
             var edit = this.GetProviderAsEditable();
 
-            if(edit != null)
+            if (edit != null)
             {
                 edit.OnReplace(index, oldValue, newValue, timestamp);
                 //TODO check this  code
                 if (!this.IsSourceObservable)
                 {
-                    var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newValue, oldValue, index);
+                    var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newValue,
+                        oldValue, index);
                     this.RaiseCollectionChangedEvent(args);
                 }
             }
         }
-        
+
         private T InternalSetValue(int index, T newValue)
         {
             var oldValue = this.InternalGetValue(index, this.DefaultSelectionContext);
@@ -143,9 +145,10 @@ namespace AlphaChiTech.Virtualization
             var oldItems = new List<T> {oldValue};
 
             //TODO check
-            if(!this.IsSourceObservable)
+            if (!this.IsSourceObservable)
             {
-                var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newItems, oldItems, index);
+                var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, newItems,
+                    oldItems, index);
                 this.RaiseCollectionChangedEvent(args);
             }
 
@@ -156,16 +159,17 @@ namespace AlphaChiTech.Virtualization
         {
             var edit = this.GetProviderAsEditable();
             var index = edit.OnAppend(newValue, timestamp);
-            
+
             if (!this.IsSourceObservable)
             {
                 var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, newValue, index);
                 this.RaiseCollectionChangedEvent(args);
             }
+
             this.OnCountTouched();
             return index;
         }
-        
+
 
         private void InternalInsertAt(int index, T item, object timestamp = null)
         {
@@ -178,8 +182,6 @@ namespace AlphaChiTech.Virtualization
                 var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index);
                 this.RaiseCollectionChangedEvent(args);
             }
-
-            
         }
 
         private bool InternalRemoveAt(int index, object timestamp = null)
@@ -194,16 +196,20 @@ namespace AlphaChiTech.Virtualization
                 var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, oldValue, index);
                 this.RaiseCollectionChangedEvent(args);
             }
-            
+
 
             return true;
         }
 
         private bool InternalRemove(T item, object timestamp = null)
         {
-            if (item == null) { return false; }
+            if (item == null)
+            {
+                return false;
+            }
+
             var edit = this.Provider as IEditableProviderItemBased<T>;
-            if(edit == null)
+            if (edit == null)
                 return false;
             var index = edit.OnRemove(item, timestamp);
 
@@ -213,12 +219,11 @@ namespace AlphaChiTech.Virtualization
                 var args = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index);
                 this.RaiseCollectionChangedEvent(args);
             }
-            
+
 
             return true;
         }
 
-      
         #endregion Internal implementation
 
         //#region Implementation of IObservable<out T>
@@ -233,6 +238,7 @@ namespace AlphaChiTech.Virtualization
         //#endregion
 
         #region Implementation of IObservable<out T>
+
         private readonly object _gate = new object();
 
         private Exception _error;
@@ -251,21 +257,37 @@ namespace AlphaChiTech.Virtualization
         }
 
         #region Implementation of IDisposable
-        public void Dispose() { this.Dispose(true); }
+
+        public void Dispose()
+        {
+            this.Dispose(true);
+        }
+
         #endregion
 
         public IDisposable Subscribe(IObserver<T> observer)
         {
-            if (observer == null) { throw new ArgumentNullException(nameof(observer)); }
-            var subscription = new Subscription((IReplaySubjectImplementation<T>)this, observer);
+            if (observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
+
+            var subscription = new Subscription(this, observer);
             lock (this._gate)
             {
                 this.CheckDisposed();
                 this._observers = this._observers.Add(observer);
                 this.ReplayBuffer(observer);
-                if (this._error != null) { observer.OnError(this._error); }
-                else if (this._isStopped) { observer.OnCompleted(); }
+                if (this._error != null)
+                {
+                    observer.OnError(this._error);
+                }
+                else if (this._isStopped)
+                {
+                    observer.OnCompleted();
+                }
             }
+
             return subscription;
         }
 
@@ -274,23 +296,43 @@ namespace AlphaChiTech.Virtualization
             lock (this._gate)
             {
                 this.CheckDisposed();
-                if (this._isStopped) { return; }
+                if (this._isStopped)
+                {
+                    return;
+                }
+
                 this._isStopped = true;
-                foreach (var item_0 in this._observers.Data) { item_0.OnCompleted(); }
+                foreach (var item_0 in this._observers.Data)
+                {
+                    item_0.OnCompleted();
+                }
+
                 this._observers = new ImmutableList<IObserver<T>>();
             }
         }
 
         public void OnError(Exception error)
         {
-            if (error == null) { throw new ArgumentNullException("error"); }
+            if (error == null)
+            {
+                throw new ArgumentNullException("error");
+            }
+
             lock (this._gate)
             {
                 this.CheckDisposed();
-                if (this._isStopped) { return; }
+                if (this._isStopped)
+                {
+                    return;
+                }
+
                 this._isStopped = true;
                 this._error = error;
-                foreach (var item_0 in this._observers.Data) { item_0.OnError(error); }
+                foreach (var item_0 in this._observers.Data)
+                {
+                    item_0.OnError(error);
+                }
+
                 this._observers = new ImmutableList<IObserver<T>>();
             }
         }
@@ -300,8 +342,15 @@ namespace AlphaChiTech.Virtualization
             lock (this._gate)
             {
                 this.CheckDisposed();
-                if (this._isStopped) { return; }
-                foreach (var item_0 in this._observers.Data) { item_0.OnNext(value); }
+                if (this._isStopped)
+                {
+                    return;
+                }
+
+                foreach (var item_0 in this._observers.Data)
+                {
+                    item_0.OnNext(value);
+                }
             }
         }
 
@@ -318,16 +367,32 @@ namespace AlphaChiTech.Virtualization
         {
             lock (this._gate)
             {
-                if (this._isDisposed) { return; }
+                if (this._isDisposed)
+                {
+                    return;
+                }
+
                 this._observers = this._observers.Remove(observer);
             }
         }
 
 
-        protected void ReplayBuffer(IObserver<T> observer) { foreach (var obj in this) { observer.OnNext(obj); } }
+        protected void ReplayBuffer(IObserver<T> observer)
+        {
+            foreach (var obj in this)
+            {
+                observer.OnNext(obj);
+            }
+        }
 
 
-        private void CheckDisposed() { if (this._isDisposed) { throw new ObjectDisposedException(string.Empty); } }
+        private void CheckDisposed()
+        {
+            if (this._isDisposed)
+            {
+                throw new ObjectDisposedException(string.Empty);
+            }
+        }
 
 
         private class Subscription : IDisposable
@@ -344,7 +409,11 @@ namespace AlphaChiTech.Virtualization
             public void Dispose()
             {
                 var observer = Interlocked.Exchange(ref this._observer, null);
-                if (observer == null) { return; }
+                if (observer == null)
+                {
+                    return;
+                }
+
                 this._subject.Unsubscribe(observer);
                 this._subject = null;
             }
@@ -352,9 +421,15 @@ namespace AlphaChiTech.Virtualization
 
         private class ImmutableList<TT>
         {
-            public ImmutableList() { this.Data = new TT[0]; }
+            public ImmutableList()
+            {
+                this.Data = new TT[0];
+            }
 
-            private ImmutableList(TT[] data) { this.Data = data; }
+            private ImmutableList(TT[] data)
+            {
+                this.Data = data;
+            }
 
             public TT[] Data { get; }
 
@@ -366,20 +441,31 @@ namespace AlphaChiTech.Virtualization
                 return new ImmutableList<TT>(newData);
             }
 
-            private int IndexOf(TT value)
-            {
-                for (var i = 0; i < this.Data.Length; ++i) { if (this.Data[i].Equals(value)) { return i; } }
-                return -1;
-            }
-
             public ImmutableList<TT> Remove(TT value)
             {
                 var i = this.IndexOf(value);
-                if (i < 0) { return this; }
+                if (i < 0)
+                {
+                    return this;
+                }
+
                 var newData = new TT[this.Data.Length - 1];
                 Array.Copy(this.Data, 0, newData, 0, i);
                 Array.Copy(this.Data, i + 1, newData, i, this.Data.Length - i - 1);
                 return new ImmutableList<TT>(newData);
+            }
+
+            private int IndexOf(TT value)
+            {
+                for (var i = 0; i < this.Data.Length; ++i)
+                {
+                    if (this.Data[i].Equals(value))
+                    {
+                        return i;
+                    }
+                }
+
+                return -1;
             }
         }
 
